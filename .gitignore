@@ -2,6 +2,9 @@
 ws/build/
 ws/install/
 ws/log/
+install/
+build/
+log/
 
 # Python
 __pycache__/
