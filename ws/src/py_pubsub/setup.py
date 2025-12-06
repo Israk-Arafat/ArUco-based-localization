@@ -25,7 +25,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-    ] + generate_data_files(['launch']),
+    ] + generate_data_files(['launch', 'config']),
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='root',
@@ -37,6 +37,8 @@ setup(
         'console_scripts': [
             'talker = py_pubsub.publisher_member_function:main',
             'move2aruco = py_pubsub.move2aruco:main',
+            'aruco_localizer = py_pubsub.aruco_localization:main',
+            'marker_tf_publisher = py_pubsub.marker_tf_publisher:main',
         ],
     },
 )

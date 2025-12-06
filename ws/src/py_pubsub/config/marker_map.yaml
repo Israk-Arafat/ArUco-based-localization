@@ -1,0 +1,25 @@
+# ArUco Marker Map Configuration
+# Defines the known positions and orientations of ArUco markers in the map frame
+#
+# Position: [x, y, z] in meters
+# Orientation: quaternion [x, y, z, w] (optional, defaults to [0, 0, 0, 1])
+
+
+markers:
+  # Marker 4: Additional location (adjust position based on your setup)
+  - id: 4
+    position: [0.5, 0.5, 0.0]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+    description: "Additional marker 4"
+  
+  # Marker 5: Additional location (adjust position based on your setup)
+  - id: 5
+    position: [-0.5, 0.5, 0.0]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+    description: "Additional marker 5"
+
+# Configuration notes:
+# 1. Measure marker positions carefully relative to your chosen origin
+# 2. Use tape measure or laser measure for accuracy
+# 4. Update this file with your actual marker positions
+
