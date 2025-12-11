@@ -1,0 +1,47 @@
+# ArUco Marker Map Configuration
+# Defines the known positions of ArUco markers in the world (map frame)
+#
+# Coordinate System:
+#   - X: forward (typical convention)
+#   - Y: left
+#   - Z: up
+#
+# Position: [x, y, z] in meters from map origin
+# Orientation: [x, y, z, w] quaternion (optional, default is identity)
+#
+# For a simple room setup:
+#   - Place markers on walls at known positions
+#   - Measure positions relative to a chosen origin (e.g., room corner)
+
+markers:
+  # Marker 0: Origin marker (at map origin, facing +X direction)
+  - id: 0
+    position: [0.0, 0.0, 0.0]
+    orientation: [0.0, 0.0, 0.0, 1.0]  # No rotation
+    description: "Origin marker - reference point"
+  
+  # Marker 1: 3 meters forward from origin
+  - id: 1
+    position: [3.0, 0.0, 0.0]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+    description: "Forward marker"
+  
+  # Marker 2: To the left side
+  - id: 2
+    position: [1.5, 2.0, 0.0]
+    orientation: [0.0, 0.0, 0.7071068, 0.7071068]  # 90° rotation around Z (facing -X)
+    description: "Left side marker"
+  
+  # Marker 3: To the right side
+  - id: 3
+    position: [1.5, -2.0, 0.0]
+    orientation: [0.0, 0.0, -0.7071068, 0.7071068]  # -90° rotation around Z (facing +X)
+    description: "Right side marker"
+
+# Notes for physical deployment:
+# 1. Print ArUco markers from the DICT_4X4_50 dictionary (or your chosen dictionary)
+# 2. Measure and record actual positions in your test environment
+# 3. Mount markers securely on walls at consistent height
+# 4. Update this file with actual measured positions
+# 5. Markers should be large enough for detection from expected distances
+#    (recommended: 10-20cm for indoor use at 1-3 meter distances)
