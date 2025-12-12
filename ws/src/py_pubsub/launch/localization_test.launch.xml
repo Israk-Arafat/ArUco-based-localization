@@ -41,7 +41,6 @@
     <param name="max_marker_distance" value="2.0"/>
   </node>
 
-  <!-- Motor Control (Optional - uncomment if you want to control the robot) -->
   <!-- <node pkg="jetbot_ros" exec="motors_waveshare" name="motors_waveshare"/> -->
 
 </launch>

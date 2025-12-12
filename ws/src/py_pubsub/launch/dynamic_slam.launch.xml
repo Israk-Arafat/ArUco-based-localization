@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- 
+  Dynamic SLAM Launch File
+  
+  This launch file starts the dynamic marker mapping system:
+  1. map_builder: Discovers markers and builds map dynamically
+  2. aruco_localizer: Localizes robot using discovered markers
+  3. Camera driver (gscam) - if needed
+  4. ArUco detection (aruco_opencv) - if needed
+  
+  The first marker detected becomes the origin. Subsequent markers
+  are positioned relative to it as they are discovered.
+  -->
+  
+  <!-- Arguments -->
+  <arg name="marker_map_file" default="marker_map.yaml" description="Marker map configuration file"/>
+  <arg name="camera_frame" default="camera_optical_link" description="Camera frame ID"/>
+  <arg name="base_frame" default="base_link" description="Robot base frame ID"/>
+  <arg name="map_frame" default="map" description="Map frame ID"/>
+  <arg name="use_closest_marker" default="true" description="Use only closest marker for localization"/>
+  <arg name="min_observations" default="3" description="Minimum observations before confirming a marker"/>
+  <arg name="auto_save" default="true" description="Automatically save map updates"/>
+  <arg name="reset_map" default="true" description="Clear existing map on startup"/>
+  
+  <!-- Dynamic Map Builder Node -->
+  <node pkg="py_pubsub" exec="map_builder" name="map_builder" output="screen">
+    <param name="marker_map_file" value="$(var marker_map_file)"/>
+    <param name="camera_frame" value="$(var camera_frame)"/>
+    <param name="base_frame" value="$(var base_frame)"/>
+    <param name="map_frame" value="$(var map_frame)"/>
+    <param name="auto_save" value="$(var auto_save)"/>
+    <param name="min_observations" value="$(var min_observations)"/>
+    <param name="reset_map" value="$(var reset_map)"/>
+  </node>
+  
+  <!-- ArUco Localizer Node -->
+  <node pkg="py_pubsub" exec="aruco_localizer" name="aruco_localizer" output="screen">
+    <param name="marker_map_file" value="$(var marker_map_file)"/>
+    <param name="camera_frame" value="$(var camera_frame)"/>
+    <param name="base_frame" value="$(var base_frame)"/>
+    <param name="map_frame" value="$(var map_frame)"/>
+    <param name="use_closest_marker" value="$(var use_closest_marker)"/>
+    <param name="max_marker_distance" value="2.0"/>
+    <param name="publish_rate" value="10.0"/>
+  </node>
+  
+  <node pkg="py_pubsub" exec="simple_joint_publisher" name="joint_state_publisher"/>
+
+  <!-- Robot State Publisher (URDF) -->
+  <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher">
+    <param name="robot_description" value="$(command 'cat $(find-pkg-share py_pubsub)/urdf/jetbot.urdf')"/>
+  </node>
+
+<!-- Camera Node: gscam with CSI camera -->
+  <node name="gscam_driver_nvgst" pkg="gscam" exec="gscam_node" output="screen">
+    <param name="camera_name" value="camera"/>
+    <param name="camera_info_url" value="package://py_pubsub/launch/csi_cam_640x360.ini"/>
+    <param name="gscam_config" value="nvarguscamerasrc sensor-id=0 ! video/x-raw(memory:NVMM), width=(int)640, height=(int)360, framerate=10/1, format=(string)NV12 ! nvvidconv ! videoconvert"/>
+    <param name="frame_id" value="$(var camera_frame)"/>
+    <param name="sync_sink" value="true"/>
+  </node>
+
+  <!-- ArUco Detection Node -->
+  <node name="aruco_opencv" pkg="aruco_opencv" exec="aruco_tracker_autostart" output="screen">
+    <param name="cam_base_topic" value="/camera/image_raw"/>
+    <param name="marker_size" value="0.05"/>
+    <param name="marker_dict" value="4X4_50"/>
+    <param name="publish_tf" value="false"/>  <!-- We'll publish our own TF -->
+    <param name="output_frame" value="$(var camera_frame)"/>
+  </node>
+  <!-- <node pkg="jetbot_ros" exec="motors_waveshare" name="motors_waveshare" >
+  </node> -->
+</launch>

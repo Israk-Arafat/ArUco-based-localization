@@ -38,3 +38,24 @@ YAML marker-map loader with schema test.
 Obstacle classifier: Achieve a stable binary obstacle-ahead prediction at ≥5 Hz on the Jetson Nano, with at least 90 percent correct stop decisions in a simple hallway test.
 
 ---
+
+## Current Status
+
+### What We Already Have:
+1. **Camera calibration** - Camera intrinsics in `csi_cam_640x360.ini`
+2. **ArUco detection** - `ros_aruco_opencv` package detecting markers and publishing poses
+3. **Robot control** - `move2aruco.py` that drives robot toward detected markers
+4. **Basic infrastructure** - gscam (camera driver), jetbot_ros (motor control)
+5. **Phase 1 somewhat done**
+
+You can run on the robot by
+ssh jetbot@10.0.0.2
+password-jetbot
+to use ros2 you have to use the docker
+docker container exec -it ros-humble bash
+source setup.bash
+
+shortcuts
+colcon build --packages-select py_pubsub
+source install/setup.bash
+ros2 launch py_pubsub dynamic_slam.launch.xml

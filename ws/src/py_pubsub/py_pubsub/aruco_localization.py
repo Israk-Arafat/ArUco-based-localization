@@ -82,6 +82,7 @@ class ArucoLocalizer(Node):
         self.declare_parameter('publish_rate', 10.0)
         self.declare_parameter('use_closest_marker', True)
         self.declare_parameter('max_marker_distance', 2.0)  # meters
+        self.declare_parameter('publish_tf', True)
         
         # Get parameters
         marker_map_file = self.get_parameter('marker_map_file').value
@@ -90,6 +91,7 @@ class ArucoLocalizer(Node):
         self.map_frame = self.get_parameter('map_frame').value
         self.use_closest = self.get_parameter('use_closest_marker').value
         self.max_distance = self.get_parameter('max_marker_distance').value
+        self.publish_tf = self.get_parameter('publish_tf').value
         
         print(f"[INIT] Parameters loaded:")
         print(f"  - marker_map_file: {marker_map_file}")
@@ -98,6 +100,7 @@ class ArucoLocalizer(Node):
         print(f"  - map_frame: {self.map_frame}")
         print(f"  - use_closest: {self.use_closest}")
         print(f"  - max_distance: {self.max_distance}")
+        print(f"  - publish_tf: {self.publish_tf}")
         
         # Load marker map
         print(f"[INIT] Loading marker map...")
@@ -136,64 +139,94 @@ class ArucoLocalizer(Node):
         self.last_detection_time = None
         self.detection_count = 0
         
+        # Timer to reload marker map periodically (for dynamic mapping)
+        self.create_timer(2.0, self.reload_marker_map_callback)
+        
         self.get_logger().info('ArUco Localizer initialized')
         print("=" * 60)
         print("ARUCO LOCALIZER READY - Waiting for detections...")
         print("=" * 60)
     
-    def load_marker_map(self, filename):
-        """Load marker positions from YAML file."""
-        marker_map = {}
-        
+    def get_marker_map_path(self):
+        """Get path to marker map file."""
         # Try to find file in package share directory
         try:
             pkg_share = get_package_share_directory('py_pubsub')
-            config_path = os.path.join(pkg_share, 'config', filename)
+            config_path = os.path.join(pkg_share, 'config', self.get_parameter('marker_map_file').value)
             if not os.path.exists(config_path):
                 # Try relative to workspace
                 config_path = os.path.join(
                     os.path.dirname(__file__),
                     '../config',
-                    filename
+                    self.get_parameter('marker_map_file').value
                 )
         except:
             # Fallback to relative path
             config_path = os.path.join(
                 os.path.dirname(__file__),
                 '../config',
-                filename
+                self.get_parameter('marker_map_file').value
             )
+        return config_path
+    
+    def load_marker_map(self, filename):
+        """Load marker positions from YAML file."""
+        marker_map = {}
+        config_path = self.get_marker_map_path()
         
         if not os.path.exists(config_path):
             self.get_logger().warn(f'Marker map file not found: {config_path}')
-            self.get_logger().warn('Using default marker at origin')
-            # Default: single marker at origin
-            marker_map[0] = {
-                'position': [0.0, 0.0, 0.0],
-                'orientation': [0.0, 0.0, 0.0, 1.0]  # quaternion [x,y,z,w]
-            }
+            self.get_logger().warn('Map will be built dynamically - waiting for markers...')
+            # Return empty map - will be populated by map_builder node
             return marker_map
         
         try:
             with open(config_path, 'r') as f:
                 data = yaml.safe_load(f)
-                if data and 'markers' in data:
+                if data and 'markers' in data and data['markers']:
                     for marker in data['markers']:
                         marker_id = marker['id']
                         marker_map[marker_id] = {
                             'position': marker['position'],
                             'orientation': marker.get('orientation', [0.0, 0.0, 0.0, 1.0])
                         }
-            self.get_logger().info(f'Loaded marker map from: {config_path}')
+                    self.get_logger().info(f'Loaded marker map from: {config_path}')
+                else:
+                    self.get_logger().info('Map file is empty - dynamic mapping mode')
         except Exception as e:
             self.get_logger().error(f'Failed to load marker map: {e}')
-            # Use default
-            marker_map[0] = {
-                'position': [0.0, 0.0, 0.0],
-                'orientation': [0.0, 0.0, 0.0, 1.0]
-            }
+            self.get_logger().info('Starting with empty map - dynamic mapping mode')
         
         return marker_map
+    
+    def reload_marker_map_callback(self):
+        """Periodically reload marker map to pick up dynamically discovered markers."""
+        config_path = self.get_marker_map_path()
+        
+        if not os.path.exists(config_path):
+            return
+        
+        try:
+            with open(config_path, 'r') as f:
+                data = yaml.safe_load(f)
+                if data and 'markers' in data and data['markers']:
+                    new_count = len(data['markers'])
+                    old_count = len(self.marker_map)
+                    
+                    # Always update map if file has content, to catch updates to existing markers too
+                    if new_count > 0:
+                        for marker in data['markers']:
+                            marker_id = marker['id']
+                            # Update or add
+                            self.marker_map[marker_id] = {
+                                'position': marker['position'],
+                                'orientation': marker.get('orientation', [0.0, 0.0, 0.0, 1.0])
+                            }
+                            
+                        if new_count > old_count:
+                            self.get_logger().info(f'Loaded new markers. Total: {new_count}')
+        except Exception as e:
+            pass  # Silently fail - file might be being written
     
     def aruco_callback(self, msg):
         """Process ArUco detections and compute robot pose."""
@@ -201,29 +234,20 @@ class ArucoLocalizer(Node):
         
         # Only print every 50th empty detection to reduce spam
         if not msg.markers:
-            if self.detection_count % 50 == 0:
-                print(f"\n[CALLBACK #{self.detection_count}] No markers detected (printed every 50 callbacks)")
             return
-        
-        print(f"\n[CALLBACK #{self.detection_count}] Received ArUco detection message")
-        print(f"  - Number of markers: {len(msg.markers)}")
-        print(f"[CALLBACK #{self.detection_count}] Marker IDs detected: {[m.marker_id for m in msg.markers]}")
         
         self.last_detection_time = self.get_clock().now()
         
         # Filter markers to only those in our map
         valid_markers = [m for m in msg.markers if m.marker_id in self.marker_map]
-        print(f"[CALLBACK #{self.detection_count}] Valid markers (in map): {[m.marker_id for m in valid_markers]}")
         
         if not valid_markers:
-            self.get_logger().warn('No known markers detected - check marker_map.yaml')
-            print(f"[CALLBACK #{self.detection_count}] WARNING: No markers from map detected!")
-            print(f"  - Detected IDs: {[m.marker_id for m in msg.markers]}")
-            print(f"  - Map has IDs: {list(self.marker_map.keys())}")
+            # Only warn every 50 detections to avoid spam
+            if self.detection_count % 50 == 0:
+                self.get_logger().warn(f'No known markers detected. Seen: {[m.marker_id for m in msg.markers]}, Map has: {list(self.marker_map.keys())}')
             return
         
         # Get camera to base_link transform
-        print(f"[CALLBACK #{self.detection_count}] Looking up TF: {self.base_frame} -> {self.camera_frame}")
         try:
             camera_to_base = self.tf_buffer.lookup_transform(
                 self.base_frame,
@@ -231,10 +255,7 @@ class ArucoLocalizer(Node):
                 rclpy.time.Time(),
                 timeout=rclpy.duration.Duration(seconds=0.1)
             )
-            print(f"[CALLBACK #{self.detection_count}] TF lookup successful")
         except Exception as e:
-            self.get_logger().warn(f'Could not get camera to base transform: {e}')
-            print(f"[CALLBACK #{self.detection_count}] TF lookup failed, using identity")
             # Use identity if not available
             camera_to_base = TransformStamped()
             camera_to_base.transform.rotation.w = 1.0
@@ -242,8 +263,6 @@ class ArucoLocalizer(Node):
         # Compute robot pose from each visible marker
         poses = []
         for marker in valid_markers:
-            print(f"[CALLBACK #{self.detection_count}] Processing marker {marker.marker_id}")
-            print(f"  - Position: [{marker.pose.position.x:.3f}, {marker.pose.position.y:.3f}, {marker.pose.position.z:.3f}]")
             try:
                 robot_pose = self.compute_robot_pose_from_marker(
                     marker,
@@ -256,50 +275,49 @@ class ArucoLocalizer(Node):
                         marker.pose.position.y,
                         marker.pose.position.z
                     ])
-                    print(f"  - Distance: {distance:.3f} m")
                     if distance < self.max_distance:
                         poses.append((robot_pose, 1.0 / (distance + 0.1), marker.marker_id))
-                        print(f"  - Added to poses (weight: {1.0 / (distance + 0.1):.3f})")
-                    else:
-                        print(f"  - Too far (>{self.max_distance}m), skipping")
             except Exception as e:
                 self.get_logger().error(f'Error processing marker {marker.marker_id}: {e}')
-                print(f"[CALLBACK #{self.detection_count}] ERROR processing marker {marker.marker_id}: {e}")
-                import traceback
-                traceback.print_exc()
         
         if not poses:
-            print(f"[CALLBACK #{self.detection_count}] No valid poses computed")
             return
         
-        print(f"[CALLBACK #{self.detection_count}] Computed {len(poses)} valid poses")
+        # print(f"[CALLBACK #{self.detection_count}] Computed {len(poses)} valid poses")
         
         # Choose pose estimation strategy
         if self.use_closest:
             # Use closest marker only
             poses.sort(key=lambda x: x[1], reverse=True)
             final_pose, weight, marker_id = poses[0]
-            self.get_logger().info(f'Using marker {marker_id} for localization')
-            print(f"[CALLBACK #{self.detection_count}] Using closest marker: {marker_id}")
+            # self.get_logger().info(f'Using marker {marker_id} for localization')
+            # print(f"[CALLBACK #{self.detection_count}] Using closest marker: {marker_id}")
         else:
             # Weighted average of all visible markers
             final_pose = self.weighted_average_poses(poses)
-            print(f"[CALLBACK #{self.detection_count}] Using weighted average of {len(poses)} markers")
+            # print(f"[CALLBACK #{self.detection_count}] Using weighted average of {len(poses)} markers")
         
-        print(f"[CALLBACK #{self.detection_count}] Final robot pose:")
-        print(f"  - Position: {final_pose['position']}")
-        print(f"  - Orientation: {final_pose['orientation']}")
+        # print(f"[CALLBACK #{self.detection_count}] Final robot pose:")
+        # print(f"  - Position: {final_pose['position']}")
+        # print(f"  - Orientation: {final_pose['orientation']}")
         
         self.latest_pose = final_pose
         
+        # Log pose occasionally (every 20 detections)
+        if self.detection_count % 20 == 0:
+            pos = final_pose['position']
+            orient = final_pose['orientation']
+            self.get_logger().info(f"Robot Pose: x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f}" +
+                                   f", qx={orient[0]:.3f}, qy={orient[1]:.3f}, qz={orient[2]:.3f}, qw={orient[3]:.3f}")
+        
         # Publish transform
-        print(f"[CALLBACK #{self.detection_count}] Publishing TF: {self.map_frame} -> {self.base_frame}")
+        # print(f"[CALLBACK #{self.detection_count}] Publishing TF: {self.map_frame} -> {self.base_frame}")
         self.publish_transform(final_pose, msg.header.stamp)
         
         # Publish pose with covariance
-        print(f"[CALLBACK #{self.detection_count}] Publishing /robot_pose")
+        # print(f"[CALLBACK #{self.detection_count}] Publishing /robot_pose")
         self.publish_pose(final_pose, msg.header.stamp)
-        print(f"[CALLBACK #{self.detection_count}] SUCCESS - Pose published!")
+        # print(f"[CALLBACK #{self.detection_count}] SUCCESS - Pose published!")
     
     def compute_robot_pose_from_marker(self, marker, camera_to_base):
         """
@@ -385,6 +403,9 @@ class ArucoLocalizer(Node):
     
     def publish_transform(self, pose, stamp):
         """Publish map -> base_link transform."""
+        if not self.publish_tf:
+            return
+
         t = TransformStamped()
         t.header.stamp = stamp
         t.header.frame_id = self.map_frame

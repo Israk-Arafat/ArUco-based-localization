@@ -1,25 +1,12 @@
-# ArUco Marker Map Configuration
-# Defines the known positions and orientations of ArUco markers in the map frame
+# ArUco Marker Map Configuration - DYNAMIC SLAM MODE
+# This file is automatically updated by the map_builder node
+# 
+# The first marker detected becomes the origin (0,0,0)
+# Additional markers are positioned relative to the first marker
+# as they are discovered during robot operation
 #
 # Position: [x, y, z] in meters
-# Orientation: quaternion [x, y, z, w] (optional, defaults to [0, 0, 0, 1])
+# Orientation: quaternion [x, y, z, w]
 
-
-markers:
-  # Marker 4: Additional location (adjust position based on your setup)
-  - id: 4
-    position: [0.5, 0.5, 0.0]
-    orientation: [0.0, 0.0, 0.0, 1.0]
-    description: "Additional marker 4"
-  
-  # Marker 5: Additional location (adjust position based on your setup)
-  - id: 5
-    position: [-0.5, 0.5, 0.0]
-    orientation: [0.0, 0.0, 0.0, 1.0]
-    description: "Additional marker 5"
-
-# Configuration notes:
-# 1. Measure marker positions carefully relative to your chosen origin
-# 2. Use tape measure or laser measure for accuracy
-# 4. Update this file with your actual marker positions
-
+# empty for initial operation - map will be built automatically
+markers: []
