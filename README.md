@@ -14,7 +14,7 @@ This project implements a visual localization and navigation system for the NVID
 *   **Obstacle Avoidance (Planned):** Integration of a CNN-based obstacle detector running on the Jetson Nano.
 *   **ROS 2 Integration:** Full usage of the ROS 2 ecosystem, including TF2 for coordinate transforms and standard message types.
 
-![JetBot SLAM Demo](images/jetbot-slam-demo.png)
+![JetBot SLAM Demo](images/Demo.png)
 
 ## Hardware Requirements
 
