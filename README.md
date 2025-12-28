@@ -1,61 +1,106 @@
-Team: Israk Arafat, Shuvra Smaran Das
+# JetBot ECE417: ArUco SLAM & Navigation
 
-Problem & Why: Use a sequence of ARUCO markers to track the robot's position at all times (SLAM-ish) and implement in ROS. On this project, we can utilize both ROS and the math we learned in class regarding rotation and translation. 
+**Team:** Israk Arafat, Shuvra Smaran Das
 
-Ambitious plan: We extend the project by adding an obstacle detector that runs directly on the Jetson Nano. A small CNN takes the JetBot’s forward-facing image and outputs a simple binary decision: safe or obstacle-ahead. This node runs in real time, and if the network signals an obstacle, the controller overrides the user’s forward command and stops the robot before contact. This gives us a minimal collision-avoidance layer that integrates with the ArUco-based localization.
+## Overview
 
-Knowledge Have: Linear algebra for rotations and translations, Python, basic ROS, and OpenCV.
+This project implements a visual localization and navigation system for the NVIDIA JetBot using ArUco markers. Developed for the ECE417 course, the system utilizes a monocular camera to detect markers, estimate the robot's pose in real-time, and build a dynamic map of the environment. It leverages ROS 2 Humble and OpenCV to achieve reliable indoor localization without expensive sensors like LiDAR.
 
-Need to learn: Camera calibration, ArUco detection, ROS TF/frames, RViz.
+## Key Features
 
-Importance: Demonstrates reliable, explainable localization with only a camera. And we can do navigation tasks without expensive sensors.
+*   **ArUco-based Localization:** Estimates the robot's position and orientation (Pose) relative to a map of known ArUco markers.
+*   **Dynamic Mapping:** Features a `map_builder` node that discovers new markers and adds them to the map in real-time, allowing for "SLAM-ish" behavior.
+*   **Navigation:** Includes scripts for basic navigation tasks, such as driving towards detected markers (`move2aruco.py`) and patrolling.
+*   **Obstacle Avoidance (Planned):** Integration of a CNN-based obstacle detector running on the Jetson Nano.
+*   **ROS 2 Integration:** Full usage of the ROS 2 ecosystem, including TF2 for coordinate transforms and standard message types.
 
-Related Work: 
-OpenCV ArUco and Aruco_ros - Detect the ARUCO markers and estimate pose. (use directly)
-Fiducials - Learn how to determine the robot’s position and orientation from multiple ARUCO markers
-Robot_localization - EKF - fuse fiducial pose with odom (use directly)
+![JetBot SLAM Demo](images/jetbot-slam-demo.png)
 
-Simplest Solution: For the simplest baseline, we’ll calibrate the camera, place a single ArUco marker with a known world pose, estimate the robot pose from that marker detection, and publish map -> base_link on tf. Localization will temporarily drop out whenever the tag is out of view.
+## Hardware Requirements
 
-Plan and Division of Work:
-By the second report:
-Israk: camera calibration, ArUco detection, compute & publish /tf, RViz
-Shuvra: static TF, simple odom publisher, basic evaluation script
-Our safe goal is single-marker localization at ≥10 Hz. Moderate is multi-marker fusion with an /odom publisher. An ambitious plan is an initial EKF fusing wheel.
+*   **NVIDIA JetBot** (Jetson Nano based)
+*   **CSI Camera** (Standard JetBot camera)
+*   **ArUco Markers** (4x4 Dictionary, 50mm size recommended)
 
-By the final report:
-Israk: robust multi-marker fusion, map file loader.
-Shuvra: EKF/UKF integration, waypoint demo.
-By the final report, our safe goal is stable room-scale localization despite brief occlusions; moderate is waypoint following using the tag-based pose; ambitious is auto-building and updating the marker map.
-Extended goal: train a CNN model with a dataset captured by the JetBot to detect obstacles and override the command of the user. 
+## Software Requirements
 
-Fallback plan: We can skip SLAM and use a static map. We can reduce FPS/resolution. If not possible to train the model, we will try to use a pretrained model. 
+*   **OS:** Ubuntu 20.04 (Jetson Nano)
+*   **Framework:** ROS 2 Humble
+*   **Containerization:** Docker (Recommended for environment consistency)
 
-Measurable and Quantifiable Goals:
-Detection rate: By the second report, we plan to have >5 HZ, and by the final report, we plan to have > 15HZ. 
-Pose error: By the final report, we plan to have <0.2 m RMS. 
-YAML marker-map loader with schema test.
-Obstacle classifier: Achieve a stable binary obstacle-ahead prediction at ≥5 Hz on the Jetson Nano, with at least 90 percent correct stop decisions in a simple hallway test.
+## Project Structure
 
----
+```
+ws/src/
+├── py_pubsub/              # Main project package
+│   ├── launch/             # Launch files (SLAM, hardware bringup)
+│   ├── py_pubsub/          # Python nodes (Localization, Mapping, Control)
+│   └── config/             # Configuration files
+├── jetbot_ros/             # JetBot motor control and interface
+├── gscam/                  # GStreamer based camera driver
+├── ros_aruco_opencv/       # ArUco detection wrapper
+└── ...
+```
 
-## Current Status
+## Installation & Setup
 
-### What We Already Have:
-1. **Camera calibration** - Camera intrinsics in `csi_cam_640x360.ini`
-2. **ArUco detection** - `ros_aruco_opencv` package detecting markers and publishing poses
-3. **Robot control** - `move2aruco.py` that drives robot toward detected markers
-4. **Basic infrastructure** - gscam (camera driver), jetbot_ros (motor control)
-5. **Phase 1 somewhat done**
+### 1. Connect to the JetBot
+SSH into your robot:
+```bash
+ssh jetbot@<ROBOT_IP>
+# Password: jetbot
+```
 
-You can run on the robot by
-ssh jetbot@10.0.0.2
-password-jetbot
-to use ros2 you have to use the docker
-docker container exec -it ros-humble bash
-source setup.bash
+### 2. Start the Docker Container
+The project is designed to run inside a ROS 2 Humble Docker container.
+```bash
+./rundocker.sh
+# Or manually:
+# docker container exec -it ros-humble bash
+```
 
-shortcuts
-colcon build --packages-select py_pubsub
+### 3. Build the Workspace
+Inside the container, navigate to the workspace and build:
+```bash
+cd /home/nihal/jetbot-ece417/ws
+colcon build --packages-select py_pubsub jetbot_ros
 source install/setup.bash
+```
+
+## Usage
+
+### Running Dynamic SLAM
+To start the camera, ArUco detector, and the dynamic mapping/localization system:
+
+```bash
 ros2 launch py_pubsub dynamic_slam.launch.xml
+```
+*This will start the `map_builder` and `aruco_localizer` nodes. The first marker detected will become the map origin (0,0,0).*
+
+### Robot Control
+To enable motor control, ensure the motor driver is running (if not included in the main launch):
+```bash
+ros2 run jetbot_ros motors_waveshare
+```
+
+To run the "Move to ArUco" behavior:
+```bash
+ros2 run py_pubsub move2aruco
+```
+
+## Nodes Description
+
+*   **`map_builder`**: Listens for marker detections. If a marker is seen that isn't in the map, it calculates its position relative to the robot and adds it to the map.
+*   **`aruco_localizer`**: Uses the known map of markers to calculate the robot's position in the `map` frame.
+*   **`move2aruco`**: A simple controller that subscribes to marker poses and sends velocity commands to drive the robot towards them.
+
+## Future Work
+
+*   **Obstacle Detection:** Implement a CNN model to override movement commands when an obstacle is detected.
+*   **Extended Kalman Filter (EKF):** Fuse wheel odometry with visual localization for more robust tracking during marker occlusions.
+*   **Waypoint Navigation:** Implement a path planner to navigate between known markers.
+
+## Acknowledgments
+
+*   **OpenCV:** For the ArUco library.
+*   **NVIDIA-AI-IOT:** For the base JetBot ROS support.
